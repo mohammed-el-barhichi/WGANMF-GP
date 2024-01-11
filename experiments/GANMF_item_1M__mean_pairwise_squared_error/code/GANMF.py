@@ -20,7 +20,7 @@ from Base.BaseRecommender import BaseRecommender
 from Utils_ import EarlyStoppingScheduler, save_weights
 
 def loss_function(y_true, y_pred):
-    return tf.losses.mean_pairwise_squared_error(y_true, y_pred)
+    return tf.losses.log_loss(y_true, y_pred)
 
 class GANMF(BaseRecommender):
     RECOMMENDER_NAME = 'GANMF'
