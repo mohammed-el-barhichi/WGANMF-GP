@@ -70,6 +70,7 @@ class GANMF(BaseRecommender):
             return encoding, loss
 
         ######################
+        # GENERATOR FUNCTION #
         ######################
         def generator(condition):
             with tf.variable_scope('generator', reuse=tf.AUTO_REUSE):
