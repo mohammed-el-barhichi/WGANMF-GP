@@ -18,9 +18,7 @@ import tensorflow as tf
 from datetime import datetime
 from Base.BaseRecommender import BaseRecommender
 from Utils_ import EarlyStoppingScheduler, save_weights
-
-def loss_function(y_true, y_pred):
-    return tf.losses.mean_pairwise_squared_error(y_true, y_pred)
+from GANRec.losses import loss_function
 
 class GANMF(BaseRecommender):
     RECOMMENDER_NAME = 'GANMF'
