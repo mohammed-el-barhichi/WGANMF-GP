@@ -2,25 +2,11 @@ import tensorflow as tf
 
 #on implemente le loss function WGAN GP
 def autoencoder_wasserstein(input_data, decoding):
-    # config = tf.ConfigProto()
-    # sess = tf.Session(config=config)
-    # # Définir la valeur initiale de lambda
-    # lambda_init = 0.1
-    # # Définir lambda comme une variable tensorflow
-    # LAMBDA = tf.Variable(lambda_init, dtype=tf.float32, name='lambda')
-    # # Définir le facteur de décroissance de lambda
-    # lambda_decay = 0.9
-    # # Définir la valeur minimale de lambda
-    # lambda_min = 0.1
-    # # Définir une opération tensorflow pour mettre à jour lambda
-    # update_lambda = tf.assign(LAMBDA, tf.maximum(LAMBDA * lambda_decay, lambda_min))
-
     def discriminator(x):
         with tf.variable_scope('discriminator', reuse=tf.AUTO_REUSE):
-            h1 = tf.layers.dense(x, units=64, activation='relu', name='h1')
-            h2 = tf.layers.dense(h1, units=32, activation='relu', name='h2')
-            score = tf.layers.dense(h2, units=1, name='score')
+            score = tf.layers.dense(x, units=1, name='score')
         return score
+    
     # Calculer le score du discriminateur pour input_data
     D_X = discriminator(input_data)
     # Calculer le score du discriminateur pour decoding
@@ -46,4 +32,4 @@ def autoencoder_wasserstein(input_data, decoding):
     return loss
 
 def loss_function(y_true, y_pred):
-    return tf.losses.huber_loss(y_true, y_pred)
+    return tf.losses.hinge_loss(y_true, y_pred)
