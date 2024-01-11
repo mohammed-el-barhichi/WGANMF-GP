@@ -65,7 +65,7 @@ class GANMF(BaseRecommender):
                                            name='encoding')
                 decoding = tf.layers.dense(encoding, units=self.num_items, kernel_initializer=glorot_uniform,
                                            name='decoding')
-            loss = loss_function(input_data, decoding)
+            loss = tf.losses.cosine_distance(input_data, decoding)
             # loss = -tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=input_data, logits=decoding))
             return encoding, loss
 
@@ -130,7 +130,7 @@ class GANMF(BaseRecommender):
         dloss = real_recon_loss + tf.maximum(0.0, m * real_recon_loss - fake_recon_loss) + \
                 d_reg * tf.add_n([tf.nn.l2_loss(var) for var in self.params['D']])
         gloss = (1 - recon_coefficient) * fake_recon_loss + \
-                recon_coefficient * loss_function(real_encoding, fake_encoding) + \
+                recon_coefficient * tf.losses.mean_squared_error(real_encoding, fake_encoding) + \
                 g_reg * tf.add_n([tf.nn.l2_loss(var) for var in self.params['G']])
 
         # update ops
