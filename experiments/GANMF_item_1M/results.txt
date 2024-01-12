@@ -200,3 +200,5 @@ CUTOFF: 5 - ROC_AUC: 0.2747792, PRECISION: 0.1556291, PRECISION_RECALL_MIN_DEN: 
 
 Experiment ran for 2:08:31
 Best MAP score: -0.1509736479028706. Best result found at: {'epochs': 106, 'num_factors': 250, 'batch_size': 128, 'm': 4, 'd_lr': 0.0002543586332615951, 'g_lr': 0.00018270941866028073, 'd_reg': 0.0001, 'recon_coefficient': 0.01, 'emb_dim': 606}
+Experiment ran for 0:00:02
+Best MAP score: -0.1509736479028706. Best result found at: {'epochs': 105, 'num_factors': 250, 'batch_size': 128, 'm': 4, 'd_lr': 0.0002543586332615951, 'g_lr': 0.00018270941866028073, 'd_reg': 0.0001, 'recon_coefficient': 0.01, 'emb_dim': 606}

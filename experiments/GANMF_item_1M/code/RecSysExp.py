@@ -34,54 +34,67 @@ from skopt import gp_minimize, dummy_minimize
 from skopt.space.space import Real, Integer, Categorical
 
 from datasets.LastFM import LastFM
-from datasets.CiaoDVD import CiaoDVD
 from datasets.Movielens import Movielens
-from datasets.Delicious import Delicious
-from datasets.AmazonMusic import AmazonMusic
 
 from Base.Evaluation.Evaluator import EvaluatorHoldout
-from Base.NonPersonalizedRecommender import TopPop, Random
 
 import GANRec as gans
+from GANRec.CAAE import CAAE
 from GANRec.GANMF import GANMF
 from GANRec.CFGAN import CFGAN
 from GANRec.DisGANMF import DisGANMF
-from GANRec.DeepGANMF import DeepGANMF
-
-from MatrixFactorization.IALSRecommender import IALSRecommender
-from MatrixFactorization.PureSVDRecommender import PureSVDRecommender
-from MatrixFactorization.NMFRecommender import NMFRecommender
-from MatrixFactorization.Cython.MatrixFactorization_Cython import MatrixFactorization_BPR_Cython
 
 from KNN.ItemKNNCFRecommender import ItemKNNCFRecommender
-
+from Base.NonPersonalizedRecommender import TopPop
 from SLIM_BPR.Cython.SLIM_BPR_Cython import SLIM_BPR_Cython
-from SLIM_ElasticNet.SLIMElasticNetRecommender import SLIMElasticNetRecommender
+from GraphBased.P3alphaRecommender import P3alphaRecommender
+from MatrixFactorization.IALSRecommender import IALSRecommender
+from MatrixFactorization.PureSVDRecommender import PureSVDRecommender
 
 seed = 1337
 
 # Generic parameters for each dataset
-dataset_kwargs = {}
-dataset_kwargs['use_local'] = True
-dataset_kwargs['force_rebuild'] = True
-dataset_kwargs['implicit'] = True
-dataset_kwargs['save_local'] = False
-dataset_kwargs['verbose'] = False
-dataset_kwargs['split'] = True
-dataset_kwargs['split_ratio'] = [0.8, 0.2, 0]
-dataset_kwargs['min_ratings'] = 2
+dataset_kwargs = {
+    'use_local': True,
+    'force_rebuild': True,
+    'implicit': True,
+    'save_local': False,
+    'verbose': False,
+    'split': True,
+    'split_ratio': [0.8, 0.2, 0],
+    'min_ratings_user': 2
+}
 
 URM_suffixes = ['_URM_train.npz', '_URM_test.npz', '_URM_validation.npz', '_URM_train_small.npz', '_URM_early_stop.npz']
-all_datasets = [LastFM, '1M']
+all_datasets = ['1M', 'hetrec2011', LastFM]
 name_datasets = [d if isinstance(d, str) else d.DATASET_NAME for d in all_datasets]
-all_recommenders = ['TopPop', 'Random', 'PureSVD', 'ALS', 'BPR', 'SLIMBPR', 'SLIMELASTIC', 'CFGAN', 'GANMF', 'DisGANMF',
-                    'DeepGANMF', 'fullGANMF', 'ItemKNN']
-early_stopping_algos = [IALSRecommender, MatrixFactorization_BPR_Cython, SLIM_BPR_Cython]
+all_recommenders = ['TopPop', 'PureSVD', 'ALS', 'SLIMBPR', 'ItemKNN', 'P3Alpha', 'CFGAN', 'CAAE', 'GANMF', 'DisGANMF']
+early_stopping_algos = [IALSRecommender, SLIM_BPR_Cython]
 similarities = ['cosine', 'jaccard', 'tversky', 'dice', 'euclidean', 'asymmetric']
 similarity_algos = ['ItemKNN']
 
 train_mode = ''
 similarity_mode = ''
+
+dict_rec_classes = {
+    # GAN-based
+    'CAAE': CAAE,
+    'CFGAN': CFGAN,
+    'GANMF': GANMF,
+    'DisGANMF': DisGANMF,
+
+    # Non-personalized
+    'TopPop': TopPop,
+
+    # MF
+    'ALS': IALSRecommender,
+    'PureSVD': PureSVDRecommender,
+
+    # KNN
+    'SLIMBPR': SLIM_BPR_Cython,
+    'P3Alpha': P3alphaRecommender,
+    'ItemKNN': ItemKNNCFRecommender
+}
 
 exp_path = os.path.join('experiments', 'datasets')
 if not os.path.exists(exp_path):
@@ -97,12 +110,12 @@ def set_seed(seed):
 
 def get_similarity_params(dimensions, similarity):
     if similarity == 'asymmetric':
-        dimensions.append(Real(low=0, high=2, prior='uniform', dtype=float, name='asymmetric_alpha'))
+        dimensions.append(Real(low=0, high=2, prior='uniform', name='asymmetric_alpha', dtype=float))
         dimensions.append(Categorical([True], name='normalize'))
 
     elif similarity == 'tversky':
-        dimensions.append(Real(low=0, high=2, prior='uniform', dtype=float, name='tversky_alpha'))
-        dimensions.append(Real(low=0, high=2, prior='uniform', dtype=float, name='tversky_beta'))
+        dimensions.append(Real(low=0, high=2, prior='uniform', name='tversky_alpha', dtype=float))
+        dimensions.append(Real(low=0, high=2, prior='uniform', name='tversky_beta', dtype=float))
         dimensions.append(Categorical([True], name='normalize'))
 
     elif similarity == 'euclidean':
@@ -124,10 +137,10 @@ def make_dataset(dataset, specs):
     sets = []
     URM_train = reader.get_URM_train()
     URM_test = reader.get_URM_test()
-    URM_for_train, _, URM_validation = reader.split_urm(
-        URM_train.tocoo(), split_ratio=[0.75, 0, 0.25], save_local=False, verbose=False, min_ratings=1)
-    URM_train_small, _, URM_early_stop = reader.split_urm(
-        URM_for_train.tocoo(), split_ratio=[0.85, 0, 0.15], save_local=False, verbose=False, min_ratings=1)
+    URM_for_train, _, URM_validation = reader.split_urm(URM_train.tocoo(), split_ratio=[0.75, 0, 0.25],
+                                                        save_local=False, min_ratings_user=1, verbose=False)
+    URM_train_small, _, URM_early_stop = reader.split_urm(URM_for_train.tocoo(), split_ratio=[0.85, 0, 0.15],
+                                                          save_local=False, min_ratings_user=1, verbose=False)
 
     sets.extend([URM_train, URM_test, URM_validation, URM_train_small, URM_early_stop])
 
@@ -183,7 +196,6 @@ class RecSysExp:
 
         self.evaluator_validation = EvaluatorHoldout(self.URM_validation, [self.at], exclude_seen=True)
         self.evaluator_earlystop = EvaluatorHoldout(self.URM_early_stop, [self.at], exclude_seen=True)
-        self.evaluatorTest = EvaluatorHoldout(self.URM_test, [self.at, 10, 20, 50], exclude_seen=True, minRatingsPerUser=2)
 
         self.fit_params = {}
 
@@ -244,7 +256,7 @@ class RecSysExp:
             Value of the objective function as denoted by the experiment metric.
         """
 
-        print('Optimizing', self.recommender_class.RECOMMENDER_NAME, 'for', self.dataset_name)
+        print('Optimizing', self.recommender_class.RECOMMENDER_NAME, train_mode, similarity_mode, 'for', self.dataset_name)
 
         # Split the parameters into build_params and fit_params
         self.build_fit_params(params)
@@ -265,6 +277,7 @@ class RecSysExp:
 
             else:
                 model = self.recommender_class(self.URM_train_small)
+                model.logsdir = self.logsdir
                 if self.recommender_class in early_stopping_algos:
                     fit_early_params = dict(self.fit_params)
                     fit_early_params.update(self.early_stopping_parameters)
@@ -297,7 +310,7 @@ class RecSysExp:
 
         return fitness
 
-    def tune(self, params, evals=10, init_config=None, seed=None):
+    def tune(self, params, evals=10, seed=None):
         """
         Runs the hyperparameter search using Gaussian Process as surrogate model or Random Search,
         saves the results of the trials and print the best found parameters.
@@ -318,21 +331,15 @@ class RecSysExp:
             Set to a fixed integer for reproducibility.
         """
 
-        msg = 'Started ' + self.recommender_class.RECOMMENDER_NAME + ' ' + self.dataset_name
+        msg = 'Started ' + self.recommender_class.RECOMMENDER_NAME + train_mode + similarity_mode + ' ' + self.dataset_name
         subprocess.run(['telegram-send', msg])
-
 
         U, I = self.URM_test.shape
 
+        # What follows is my ugly way of incorporating dependency on hyperparameters with scikit-optimize
         if self.recommender_class == GANMF:
             params.append(Integer(4, int(I * 0.75) if I <= 1024 else 1024, name='emb_dim', dtype=int))
             self.fit_param_names.append('emb_dim')
-
-        if self.recommender_class == CFGAN or self.recommender_class == DeepGANMF:
-            params.append(Integer(4, int(I * 0.75) if I <= 1024 else 1024, name='d_nodes', dtype=int))
-            params.append(Integer(4, int(I * 0.75) if I <= 1024 else 1024, name='g_nodes', dtype=int))
-            self.fit_param_names.append('d_nodes')
-            self.fit_param_names.append('g_nodes')
 
         if self.recommender_class == DisGANMF:
             params.append(Integer(4, int(I * 0.75) if I <= 1024 else 1024, name='d_nodes', dtype=int))
@@ -346,9 +353,10 @@ class RecSysExp:
         '''
         try:
             idx = self.dimension_names.index('num_factors')
-            maxval = params[idx].bounds[1]
-            if maxval > min(U, I):
-                params[idx] = Integer(1, min(U, I), name='num_factors', dtype=int)
+            if not isinstance(params[idx], Categorical):
+                maxval = params[idx].bounds[1]
+                if maxval > min(U, I):
+                    params[idx] = Integer(1, min(U, I), name='num_factors', dtype=int)
         except ValueError:
             pass
 
@@ -380,7 +388,7 @@ class RecSysExp:
                                           callback=[checkpoint_saver])
                 else:
                     results = dummy_minimize(self.obj_func, params, n_calls=evals, random_state=seed, verbose=True,
-                                          callback=[checkpoint_saver])
+                                             callback=[checkpoint_saver])
 
             t_end = int(time.time())
 
@@ -390,7 +398,7 @@ class RecSysExp:
                 f.write('Experiment ran for {}\n'.format(str(datetime.timedelta(seconds=t_end - t_start))))
                 f.write('Best {} score: {}. Best result found at: {}\n'.format(self.metric, results.fun, best_params))
 
-            if self.recommender_class in [IALSRecommender, MatrixFactorization_BPR_Cython]:
+            if self.recommender_class in [IALSRecommender]:
                 self.dimension_names.append('epochs')
             self.build_fit_params(best_params.values())
 
@@ -400,12 +408,8 @@ class RecSysExp:
             with open(os.path.join(self.logsdir, 'best_params.txt'), 'w') as f:
                 f.write(json.dumps(d))
 
-        msg = 'Finished ' + self.recommender_class.RECOMMENDER_NAME + ' ' + self.dataset_name
+        msg = 'Finished ' + self.recommender_class.RECOMMENDER_NAME + train_mode + similarity_mode + ' ' + self.dataset_name
         subprocess.run(['telegram-send', msg])
-
-
-def run_exp(experiment, dimensions, evals, init_config=None):
-    experiment.tune(dimensions, evals, init_config)
 
 
 def main(arguments):
@@ -414,24 +418,12 @@ def main(arguments):
     algo = None
     sim = None
     dataset = None
-
-    if '--build-datasets' in arguments:
-        print('Building all necessary datasets required for the experiments. Disregarding other arguments! ' +
-        'You will need to run this script again without --build_datasets in order to run experiments!')
-        # Make all datasets
-        for d in all_datasets:
-            load_URMs(d, dataset_kwargs)
-        return
-
-    if '--user' in arguments and train_mode == '':
-        train_mode = 'user'
-        arguments.remove('--user')
-
-    if '--item' in arguments and train_mode == '':
-        train_mode = 'item'
-        arguments.remove('--item')
+    build_dataset = False
 
     for arg in arguments:
+        if arg == '--build-dataset':
+            build_dataset = True
+            break
         if arg in all_recommenders and algo is None:
             algo = arg
         if arg in similarities and sim is None:
@@ -439,20 +431,19 @@ def main(arguments):
             similarity_mode = sim
         if arg in name_datasets and dataset is None:
             dataset = all_datasets[name_datasets.index(arg)]
+        if arg in ['--user', '--item'] and train_mode == '':
+            train_mode = arg[2:]
 
-    dict_rec_classes = {}
-    dict_dimensions = {}
-    dict_fit_params = {}
-    dict_init_configs = {}
-
+    if build_dataset:
+        dataset_str = dataset if isinstance(dataset, str) else dataset.DATASET_NAME
+        print('Building ' + dataset_str + '. Skipping other arguments! You need to run this script without --build-dataset to run experiments!')
+        load_URMs(dataset, dataset_kwargs)
+        return
 
     # Experiment parameters
     puresvd_dimensions = [
         Integer(1, 250, name='num_factors', dtype=int)
     ]
-    puresvd_fit_params = [d.name for d in puresvd_dimensions]
-
-
 
     ials_dimensions = [
         Integer(1, 250, name='num_factors', dtype=int),
@@ -461,22 +452,6 @@ def main(arguments):
         Real(low=1e-5, high=1e-2, prior='log-uniform', name='reg', dtype=float),
         Real(low=1e-3, high=10.0, prior='log-uniform', name='epsilon', dtype=float)
     ]
-    ials_fit_params = [d.name for d in ials_dimensions]
-
-
-
-    bpr_dimensions = [
-        Categorical([1500], name='epochs'),
-        Integer(1, 250, name='num_factors', dtype=int),
-        Categorical([128, 256, 512, 1024], name='batch_size'),
-        Categorical(["adagrad", "adam"], name='sgd_mode'),
-        Real(low=1e-12, high=1e-3, prior='log-uniform', name='positive_reg'),
-        Real(low=1e-12, high=1e-3, prior='log-uniform', name='negative_reg'),
-        Real(low=1e-6, high=1e-2, prior='log-uniform', name='learning_rate'),
-    ]
-    bpr_fit_params = [d.name for d in bpr_dimensions]
-
-
 
     slimbpr_dimensions = [
         Integer(low=5, high=1000, prior='uniform', name='topK', dtype=int),
@@ -487,41 +462,42 @@ def main(arguments):
         Real(low=1e-9, high=1e-3, prior='log-uniform', name='lambda_j', dtype=float),
         Real(low=1e-4, high=1e-1, prior='log-uniform', name='learning_rate', dtype=float)
     ]
-    slimbpr_fit_names = [d.name for d in slimbpr_dimensions]
-
-
-
-    slimelastic_dimensions = [
-        Integer(low=5, high=1000, prior='uniform', name='topK', dtype=int),
-        Real(low=1e-5, high=1.0, prior='log-uniform', name='l1_ratio', dtype=float),
-        Real(low=1e-3, high=1.0, prior='uniform', name='alpha')
-    ]
-    slimelastic_fit_names = [d.name for d in slimelastic_dimensions]
-
-
 
     cfgan_dimensions = [
         Categorical([300], name='epochs'),
-        Integer(1, 5, prior='uniform', name='d_steps', dtype=int),
-        Integer(1, 5, prior='uniform', name='g_steps', dtype=int),
-        Integer(1, 5, prior='uniform', name='d_layers', dtype=int),
-        Integer(1, 5, prior='uniform', name='g_layers', dtype=int),
-        Categorical(['linear', 'tanh', 'sigmoid'], name='d_hidden_act'),
-        Categorical(['linear', 'tanh', 'sigmoid'], name='g_hidden_act'),
+        Categorical([1, 2, 3, 4, 5], name='d_steps'),
+        Categorical([1, 2, 3, 4, 5], name='g_steps'),
+        Categorical([1, 2, 3, 4, 5], name='d_layers'),
+        Categorical([1, 2, 3, 4, 5], name='g_layers'),
         Categorical(['ZR', 'PM', 'ZP'], name='scheme'),
-        Categorical([64, 128, 256, 512, 1024], name='d_batch_size'),
-        Categorical([64, 128, 256, 512, 1024], name='g_batch_size'),
-        Real(low=0, high=1, prior='uniform', name='zr_ratio', dtype=float),
-        Real(low=0, high=1, prior='uniform', name='zp_ratio', dtype=float),
-        Real(low=0, high=1, prior='uniform', name='zr_coefficient', dtype=float),
-        Real(low=1e-4, high=1e-2, prior='log-uniform', name='d_lr', dtype=float),
-        Real(low=1e-4, high=1e-2, prior='log-uniform', name='g_lr', dtype=float),
-        Real(low=1e-6, high=1e-4, prior='log-uniform', name='d_reg', dtype=float),
-        Real(low=1e-6, high=1e-4, prior='log-uniform', name='g_reg', dtype=float),
+        Categorical([0.005, 0.001, 0.0005, 0.0001], name='d_lr'),
+        Categorical([0.005, 0.001, 0.0005, 0.0001], name='g_lr'),
+        Categorical([32, 64, 128, 256], name='d_batch_size'),
+        Categorical([32, 64, 128, 256], name='g_batch_size'),
+        Categorical([0.5, 0.25, 0.1, 0.05, 0.01], name='zr_coefficient'),
+        Real(low=1e-6, high=1e-1, prior='log-uniform', name='d_reg', dtype=float),
+        Real(low=1e-6, high=1e-1, prior='log-uniform', name='g_reg', dtype=float),
+        Categorical([10, 30, 50, 70, 90], name='zr_ratio'),
+        Categorical([10, 30, 50, 70, 90], name='zp_ratio'),
     ]
-    cfgan_fit_params = [d.name for d in cfgan_dimensions]
 
-
+    caae_dimensions = [
+        Categorical([300], name='epochs'),
+        Categorical([5, 10, 15, 20], name='d_steps'),
+        Categorical([5, 10, 15, 20], name='g_steps'),
+        Categorical([5, 10, 15, 20], name='gpr_steps'),
+        Categorical([1, 2, 3, 4, 5], name='g_layers'),
+        Categorical([1, 2, 3, 4, 5], name='gpr_layers'),
+        Categorical([20, 50, 100, 150, 200], name='g_units'),
+        Categorical([20, 50, 100, 150, 200], name='gpr_units'),
+        Integer(low=5, high=250, name='num_factors', dtype=int),
+        Categorical([32, 64, 128, 256], name='m_batch'),
+        Categorical([1024 * i for i in range(1, 11)], name='d_bsize'),
+        Categorical([1e-4, 5e-4, 1e-3, 5e-3], name='lr'),
+        Categorical([1e-4, 1e-3, 1e-2, 1e-1], name='beta'),
+        Categorical([i / 10 for i in range(1, 10)], name='S'),
+        Categorical([i / 10 for i in range(1, 10)], name='lmbda')
+    ]
 
     ganmf_dimensions = [
         Categorical([300], name='epochs'),
@@ -532,115 +508,64 @@ def main(arguments):
         Real(low=1e-4, high=1e-2, prior='log-uniform', name='g_lr', dtype=float),
         Real(low=1e-6, high=1e-4, prior='log-uniform', name='d_reg', dtype=float),
         Real(low=1e-2, high=0.5, prior='uniform', name='recon_coefficient', dtype=float),
-        # Integer(5, 400, name='emb_dim', dtype=int),
-        # Integer(1, 10, name='d_steps', dtype=int),
-        # Integer(1, 10, name='g_steps', dtype=int),
-        # Real(low=1e-6, high=1e-4, prior='log-uniform', name='g_reg', dtype=float),
     ]
-    ganmf_fit_params = [d.name for d in ganmf_dimensions]
-
-
 
     disgan_dimensions = [
         Categorical([300], name='epochs'),
         Categorical(['linear', 'tanh', 'relu', 'sigmoid'], name='d_hidden_act'),
         Integer(low=1, high=5, prior='uniform', name='d_layers', dtype=int),
-        Integer(low=1, high=250, name='num_factors', dtype=int),
+        Integer(low=5, high=250, name='num_factors', dtype=int),
         Categorical([64, 128, 256, 512, 1024], name='batch_size'),
         Real(low=1e-4, high=1e-2, prior='log-uniform', name='d_lr', dtype=float),
         Real(low=1e-4, high=1e-2, prior='log-uniform', name='g_lr', dtype=float),
         Real(low=1e-6, high=1e-4, prior='log-uniform', name='d_reg', dtype=float),
         Real(low=1e-2, high=0.5, prior='uniform', name='recon_coefficient', dtype=float)
     ]
-    disgan_fit_params = [d.name for d in disgan_dimensions]
-
-
-
-    deepganmf_dimensions = [
-        Categorical([300], name='epochs'),
-        Categorical(['linear', 'tanh', 'relu', 'sigmoid'], name='d_hidden_act'),
-        Categorical(['linear', 'tanh', 'relu', 'sigmoid'], name='g_hidden_act'),
-        Categorical(['linear', 'tanh', 'relu', 'sigmoid'], name='g_output_act'),
-        Categorical([1, 3, 5], name='d_layers'),
-        Categorical([1, 2, 3, 4, 5], name='g_layers'),
-        Categorical([64, 128, 256, 512, 1024], name='batch_size'),
-        Integer(low=1, high=10, name='m', dtype=int),
-        Real(low=1e-4, high=1e-2, prior='log-uniform', name='d_lr', dtype=float),
-        Real(low=1e-4, high=1e-2, prior='log-uniform', name='g_lr', dtype=float),
-        Real(low=1e-6, high=1e-4, prior='log-uniform', name='d_reg', dtype=float),
-        Real(low=1e-2, high=0.5, prior='uniform', name='recon_coefficient', dtype=float),
-    ]
-    deepganmf_fit_params = [d.name for d in deepganmf_dimensions]
-
-
 
     itemknn_dimensions = [
-        Integer(low=5, high=1000, name='topK', dtype=int),
-        Integer(low=0, high=1000, name='shrink', dtype=int),
+        Integer(low=5, high=1000, prior='uniform', name='topK', dtype=int),
+        Integer(low=0, high=1000, prior='uniform', name='shrink', dtype=int),
         Categorical([True, False], name='normalize')
     ]
-    itemknn_fit_params = [d.name for d in itemknn_dimensions]
 
+    p3alpha_dimensions = [
+        Integer(low=5, high=1000, prior='uniform', name='topK', dtype=int),
+        Real(low=0, high=2, prior='uniform', name='alpha', dtype=float),
+        Categorical([True, False], name='normalize_similarity')
+    ]
 
-
-    dict_rec_classes['TopPop'] = TopPop
-    dict_rec_classes['Random'] = Random
-    dict_rec_classes['PureSVD'] = PureSVDRecommender
-    dict_rec_classes['BPR'] = MatrixFactorization_BPR_Cython
-    dict_rec_classes['ALS'] = IALSRecommender
-    dict_rec_classes['GANMF'] = GANMF
-    dict_rec_classes['CFGAN'] = CFGAN
-    dict_rec_classes['DisGANMF'] = DisGANMF
-    dict_rec_classes['SLIMBPR'] = SLIM_BPR_Cython
-    dict_rec_classes['SLIMELASTIC'] = SLIMElasticNetRecommender
-    dict_rec_classes['DeepGANMF'] = DeepGANMF
-    dict_rec_classes['ItemKNN'] = ItemKNNCFRecommender
-
-    dict_dimensions['TopPop'] = []
-    dict_dimensions['Random'] = []
-    dict_dimensions['PureSVD'] = puresvd_dimensions
-    dict_dimensions['BPR'] = bpr_dimensions
-    dict_dimensions['ALS'] = ials_dimensions
-    dict_dimensions['GANMF'] = ganmf_dimensions
-    dict_dimensions['CFGAN'] = cfgan_dimensions
-    dict_dimensions['DisGANMF'] = disgan_dimensions
-    dict_dimensions['SLIMBPR'] = slimbpr_dimensions
-    dict_dimensions['SLIMELASTIC'] = slimelastic_dimensions
-    dict_dimensions['DeepGANMF'] = deepganmf_dimensions
-    dict_dimensions['ItemKNN'] = itemknn_dimensions
-
-    dict_fit_params['TopPop'] = []
-    dict_fit_params['Random'] = []
-    dict_fit_params['PureSVD'] = puresvd_fit_params
-    dict_fit_params['BPR'] = bpr_fit_params
-    dict_fit_params['ALS'] = ials_fit_params
-    dict_fit_params['GANMF'] = ganmf_fit_params
-    dict_fit_params['CFGAN'] = cfgan_fit_params
-    dict_fit_params['DisGANMF'] = disgan_fit_params
-    dict_fit_params['SLIMBPR'] = slimbpr_fit_names
-    dict_fit_params['SLIMELASTIC'] = slimelastic_fit_names
-    dict_fit_params['DeepGANMF'] = deepganmf_fit_params
-    dict_fit_params['ItemKNN'] = itemknn_fit_params
+    dict_dimensions = {
+        'TopPop': [],
+        'Random': [],
+        'PureSVD': puresvd_dimensions,
+        'ALS': ials_dimensions,
+        'SLIMBPR': slimbpr_dimensions,
+        'ItemKNN': itemknn_dimensions,
+        'P3Alpha': p3alpha_dimensions,
+        'CFGAN': cfgan_dimensions,
+        'CAAE': caae_dimensions,
+        'GANMF': ganmf_dimensions,
+        'DisGANMF': disgan_dimensions
+    }
 
     if algo in similarity_algos:
         if sim is not None:
             dict_dimensions[algo].append(Categorical([sim], name='similarity'))
             dict_dimensions[algo] = get_similarity_params(dict_dimensions[algo], sim)
-            dict_fit_params[algo] = [d.name for d in dict_dimensions[algo]]
         else:
             raise ValueError(f'{algo} selected but no similarity specified!')
 
-    new_exp = RecSysExp(dict_rec_classes[algo], dataset=dataset, fit_param_names=dict_fit_params[algo],
+    new_exp = RecSysExp(dict_rec_classes[algo], dataset=dataset,
+                        fit_param_names=[d.name for d in dict_dimensions[algo]],
                         method='bayesian', seed=seed)
-    new_exp.tune(dict_dimensions[algo], evals=EVALS,
-                 init_config=dict_init_configs[algo] if algo in dict_init_configs else None)
+    new_exp.tune(dict_dimensions[algo], evals=EVALS)
 
 
 if __name__ == '__main__':
     """
     Run this script as:
     
-    python RecSysExp.py [--build-datasets] <algorithm_name> [--user | --item] <dataset_name> [<similarity_type>]
+    python RecSysExp.py [--build-dataset] <dataset-name> <recommender-name> [--user | --item] [<similarity-type>]
     """
 
     assert len(sys.argv) >= 2, f'Number of arguments must be greater than 2, given {len(sys.argv)}'
