@@ -4,7 +4,7 @@ def wasserstein_loss(y_true, y_pred):
     return tf.reduce_mean(y_true * y_pred)
 
 def gradient_penalty(real, fake, autoencoder):
-    alpha = tf.random_uniform(shape=[real.shape[0], 1], minval=0., maxval=1.)
+    alpha = tf.random_uniform(shape=[tf.shape(real)[0], 1], minval=0., maxval=1.)
     differences = fake - real
     interpolates = real + (alpha * differences)
     gradients = tf.gradients(autoencoder(interpolates), [interpolates])[0]
