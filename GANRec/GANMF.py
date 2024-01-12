@@ -65,7 +65,7 @@ class GANMF(BaseRecommender):
                                            name='encoding')
                 decoding = tf.layers.dense(encoding, units=self.num_items, kernel_initializer=glorot_uniform,
                                            name='decoding')
-            loss = tf.losses.mean_squared_error(input_data, decoding)
+            loss = tf.losses.huber_loss(input_data, decoding)
             # loss_cosh = tf.keras.losses.logcosh
             # loss = tf.reshape(loss_cosh(input_data, decoding), [-1])
             # loss = autoencoder_wasserstein(input_data, decoding)
@@ -91,7 +91,7 @@ class GANMF(BaseRecommender):
 
     def wasserstein(self, real_data, fake_data, real_encoding, fake_encoding, batch_size, recon_coefficient):
         # disc_cost = tf.reduce_mean(fake_encoding) - tf.reduce_mean(real_encoding)
-        disc_cost = recon_coefficient * tf.keras.backend.mean(real_encoding * fake_encoding)
+        disc_cost = recon_coefficient * tf.losses.mean_squared_error(real_encoding, fake_encoding)
         alpha = tf.random_uniform(
                             shape=[batch_size,1], 
                             minval=0.,
