@@ -56,6 +56,7 @@ class GANMF(BaseRecommender):
 
         glorot_uniform = tf.glorot_uniform_initializer()
 
+        
         ########################
         # AUTOENCODER FUNCTION #
         ########################
@@ -65,7 +66,7 @@ class GANMF(BaseRecommender):
                                            name='encoding')
                 decoding = tf.layers.dense(encoding, units=self.num_items, kernel_initializer=glorot_uniform,
                                            name='decoding')
-            loss = loss_function(input_data, decoding)
+            loss = loss_function(input_data, decoding, self.autoencoder, self.batch_size)
             # loss = -tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=input_data, logits=decoding))
             return encoding, loss
 
