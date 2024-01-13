@@ -122,7 +122,7 @@ class GANMF(BaseRecommender):
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
         gradient_penalty = tf.reduce_mean((slopes-1.)**2)
         LAMBDA = 10
-        disc_cost += LAMBDA*gradient_penalty
+        # disc_cost += LAMBDA*gradient_penalty
         return disc_cost
     
     def fit(self, num_factors=10, emb_dim=32, epochs=300, batch_size=32, d_lr=1e-4, g_lr=1e-4, d_steps=1, g_steps=1,
