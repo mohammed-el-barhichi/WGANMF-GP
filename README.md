@@ -1,4 +1,4 @@
-# GAN-MF-RS
+# WGANMF-GP
 
 <img src="WGANMF-GP.png" alt="WGANMF-GP architecture" width="700">
 
