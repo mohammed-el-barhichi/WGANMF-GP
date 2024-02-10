@@ -6,7 +6,7 @@ This repository contains the datasets' splits, the source code of the experiment
 
 
 ## How to use this repo
-This repo is based on [GANMF](https://github.com/edervishaj/GANMF)? In our paper, we were based on this paper to enhace the results found by the autors.
+This repo is based on [GANMF](https://github.com/edervishaj/GANMF) In our paper, we were based on this paper to enhace the results found by the autors.
 In order to run the code and experiments you need first to setup a Python environment. Any environment manager will work, but we suggest `conda` since it is easier to recreate our environment if using a GPU. `conda` can help with the installation of `CUDA` and `CUDA toolkit` necessary to utilize available GPU(s). We highly recommend running this repo with a GPU since GAN-based
 recommenders require long training times.
 
